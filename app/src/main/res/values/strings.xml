@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">googleAuth</string>
+    <string name="btAuth">Fazer login com o Google!</string>
+</resources>
