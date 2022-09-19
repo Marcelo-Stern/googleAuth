@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">googleAuth</string>
     <string name="btAuth">Fazer login com o Google!</string>
+    <string name="txtLogado">Usuário logado com sucesso!</string>
 </resources>

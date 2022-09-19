@@ -6,6 +6,7 @@ import android.content.IntentSender
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
+import android.widget.Button
 import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.identity.SignInClient
@@ -20,11 +21,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var oneTapClient: SignInClient
     private lateinit var signInRequest: BeginSignInRequest
 
+    private val id_client: String = "199030931005-ggqflg7pfmosoqvc7jl26c3mtks7loae.apps.googleusercontent.com"
 
     private val REQ_ONE_TAP = 2  // Can be any integer unique to the Activity
     private var showOneTapUI = true
 
-    lateinit var auth: FirebaseAuth
+    private lateinit var auth: FirebaseAuth
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,31 +37,55 @@ class MainActivity : AppCompatActivity() {
 
         oneTapClient = Identity.getSignInClient(this)
         signInRequest = BeginSignInRequest.builder()
-            .setPasswordRequestOptions(BeginSignInRequest.PasswordRequestOptions.builder())
-            .setSupported(true)
-                .build())
+            .setPasswordRequestOptions(
+                BeginSignInRequest.PasswordRequestOptions.builder()
+                    .setSupported(true)
+                    .build()
+            )
             .setGoogleIdTokenRequestOptions(
                 BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
                     .setSupported(true)
                     // Your server's client ID, not your Android client ID.
-                    .setServerClientId(R.string.project-199030931005)
+                    .setServerClientId(id_client)
                     // Only show accounts previously used to sign in.
                     .setFilterByAuthorizedAccounts(true)
-                    .build())
+                    .build()
+            )
             .setAutoSelectEnabled(true)
             .build()
 
         oneTapClient.beginSignIn(signInRequest)
-            .addonSuccessListener(this) { result ->
+            .addOnSuccessListener(this) { result ->
                 try {
                     startIntentSenderForResult(
                         result.pendingIntent.intentSender, REQ_ONE_TAP,
-                        null, 0, 0, 0, null)
-                } catch (e: IntentSender.sendIntentException){
-                    Log.e(TAG, "Couldn't start One Tap UI: ${e.localizedMessage})
+                        null, 0, 0, 0, null
+                    )
+                } catch (e: IntentSender.SendIntentException) {
+                    Log.e(TAG, "Couldn't start One Tap UI: ${e.localizedMessage}")
                 }
             }
-        .addOnFailureListener(this) { e ->
+            .addOnFailureListener(this) { e ->
+                // No saved credentials found. Launch the One Tap sign-up flow, or
+                // do nothing and continue presenting the signed-out
+                Log.d(TAG, e.localizedMessage)
+            }
+
+        signInRequest = BeginSignInRequest.builder()
+            .setGoogleIdTokenRequestOptions(
+                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
+                    .setSupported(true)
+                    // Your server's client ID, not your Android cliend ID.
+                    .setServerClientId(id_client)
+                    // Only show accounts previously used to sign in.
+                    .setFilterByAuthorizedAccounts(true)
+                    .build()
+            )
+            .build()
+
+        val btnGoogle: Button = findViewById(R.id.btnAuth)
+        btnGoogle.setOnClickListener {
+            onStart()
         }
     }
 
@@ -74,21 +100,23 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val credential = oneTapClient.getSignInCredentialFromIntent(data)
                     val idToken = credential.googleIdToken
+                    val username = credential.id
                     val password = credential.password
                     when {
                         idToken != null -> {
                             // Got an ID token from Google. Use it to authenticate
-                            // with Firebase.
+                            // with your backend.
                             Log.d(TAG, "Got ID token.")
                             showOneTapUI = false
                         }
                         password != null -> {
-                            // Got an ID token from Google. Use it to authenticate
-                            // with Firebase.
-                            Log.d(TAG, "Got ID token.")
+                            // Got a saved username and password. Use them to authenticate
+                            // with your backend.
+                            Log.d(TAG, "Got password.")
+                        }
                         else -> {
                             // Shouldn't happen.
-                            Log.d(TAG, "No ID token!")
+                            Log.d(TAG, "No ID token or password!")
                         }
                     }
                 } catch (e: ApiException) {
@@ -96,11 +124,36 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        when {
+            idToken != null -> {
+                // Got an ID token from Google. Use it to authenticate
+                // with Firebase.
+                val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
+                auth.signInWithCredential(firebaseCredential)
+                    .addOnCompleteListener(this) { task ->
+                        if (task.isSuccessful) {
+                            // Sign in success, update UI with the signed-in user's information
+                            Log.d(TAG, "signInWithCredential:success")
+                            val user = auth.currentUser
+                            val intent = Intent(this, principalActivity::class.java)
+                            startActivity(intent)
+                        } else {
+                            // If sign in fails, display a message to the user.
+                            Log.w(TAG, "signInWithCredential:failure", task.exception)
+                        }
+                    }
+            }
+            else -> {
+                // Shouldn't happen.
+                Log.d(TAG, "No ID token!")
+            }
+        }
     }
 
-    override fun onStart() {
-        super.onStart()
-        // Check if user is signed in (non-null) and update UI accordingly.
-        val currentUser = auth.currentUser
+         override fun onStart() {
+            super.onStart()
+            // Check if user is signed in (non-null) and update UI accordingly.
+            val currentUser = auth.currentUser
+        }
     }
-}
